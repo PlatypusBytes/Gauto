@@ -13,7 +13,7 @@ def sin_3d_fct(x, y, z):
 
 
 
-def plot_3D(coords, coords_field, function):
+def plot_3D(xy_coords, depth, coords_field, function):
     """
     Plots the results for a 2D field
 
@@ -25,8 +25,8 @@ def plot_3D(coords, coords_field, function):
     :return:
     """
 
-    z_coord = np.sort(np.array(list(set(coords[:, 2]))))
-    data_points_z = function(coords[:, 0], coords[:, 1], z_coord[0])
+    z_coord = depth
+    data_points_z = function(xy_coords[:, 0], xy_coords[:, 1], z_coord[0])
 
     data_points_field = function(coords_field[0], coords_field[1], coords_field[2])
 
@@ -35,11 +35,11 @@ def plot_3D(coords, coords_field, function):
     ax[1].set_position([0.15, 0.18, 0.5, 0.35])
 
     ax[0].set_title(f"Depth {z_coord[0]}")
-    im1 = ax[0].scatter(coords[:, 0], coords[:, 1], c=data_points_z, vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
+    im1 = ax[0].scatter(xy_coords[:, 0], xy_coords[:, 1], c=data_points_z, vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
                         edgecolor='k', marker="o")
     im2 = ax[1].pcolor(coords_field[0][:, :, 0], coords_field[1][:, :, 0], data_points_field[:, :, 0],
                  vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet")
-    im3 = ax[1].scatter(coords[:, 0], coords[:, 1], c=data_points_z, vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
+    im3 = ax[1].scatter(xy_coords[:, 0], xy_coords[:, 1], c=data_points_z, vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
                         edgecolor='k', marker="o")
 
     cbar = plt.colorbar(im1, ax=ax[0])
@@ -66,8 +66,8 @@ def plot_3D(coords, coords_field, function):
     # The function to be called anytime a slider's value changes
     def update(val):
         ax[0].set_title(f"Depth {round(slider.val, 2)}")
-        ax[0].scatter(coords[:, 0], coords[:, 1],
-                      c=function(coords[:, 0], coords[:, 1], slider.val),
+        ax[0].scatter(xy_coords[:, 0], xy_coords[:, 1],
+                      c=function(xy_coords[:, 0], xy_coords[:, 1], slider.val),
                       vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
                       edgecolor='k', marker="o")
 
@@ -75,8 +75,8 @@ def plot_3D(coords, coords_field, function):
         ax[1].pcolor(coords_field[0][:, :, idx], coords_field[1][:, :, idx], data_points_field[:, :, idx],
                      vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet")
 
-        ax[1].scatter(coords[:, 0], coords[:, 1],
-                      c=function(coords[:, 0], coords[:, 1], slider.val),
+        ax[1].scatter(xy_coords[:, 0], xy_coords[:, 1],
+                      c=function(xy_coords[:, 0], xy_coords[:, 1], slider.val),
                       vmin=np.min(data_points_z), vmax=np.max(data_points_z), cmap="jet",
                       edgecolor='k', marker="o")
         fig.canvas.draw_idle()
@@ -87,7 +87,7 @@ def plot_3D(coords, coords_field, function):
     return
 
 
-def main(x=10, y=10, z=10, output="./", nb_points=[100, 100, 50]):
+def main(dimensions=[10, 10, 10], discretisation=[11, 11, 11], nb_samples=5, output="./"):
     """
     Create dataset based on analytical solution
 
@@ -95,7 +95,7 @@ def main(x=10, y=10, z=10, output="./", nb_points=[100, 100, 50]):
     :param y: y coordinate (max and min)
     :param z: z coordinate (max and min)
     :param output: location of the output files
-    :param nb_points: list number of points for interpolation along each axis
+    :param nb_points: list number of points for interpolation on the xy plane
     :return:
     """
 
@@ -104,37 +104,48 @@ def main(x=10, y=10, z=10, output="./", nb_points=[100, 100, 50]):
         os.makedirs(output)
 
     # create meshgrid arrays
-    gx, gy, gz = np.meshgrid(np.linspace(-x, x, nb_points[0]),
-                             np.linspace(-y, y, nb_points[1]),
-                             np.linspace(-z, z, nb_points[2]),
+    gx, gy, gz = np.meshgrid(np.linspace(-dimensions[0], dimensions[0], discretisation[0]),
+                             np.linspace(-dimensions[1], dimensions[1], discretisation[1]),
+                             np.linspace(-dimensions[2], dimensions[2], discretisation[2]),
                              indexing='ij')
-
+    # data 3D
     data_curve = sin_3d_fct(gx.ravel(), gy.ravel(), gz.ravel())
+    coord_3d = np.array([gx.ravel(), gy.ravel(), gz.ravel()]).T
+
+    # 2D plane
+    xy_plane = np.unique(np.array([gx.ravel(), gy.ravel()]).T, axis=0)
+    depth = np.linspace(0, dimensions[2], discretisation[2])
 
     # select random points from data_curve according to nb_points
-    id = np.random.choice(len(gx.ravel()), size=sum(nb_points), replace=False)
-    coords = np.array([gx.ravel(), gy.ravel(), gz.ravel()]).T[id, :]
-    data_points = sin_3d_fct(coords[:, 0], coords[:, 1], coords[:, 2])
+    idx_xy_plane = np.random.choice(len(xy_plane), size=nb_samples, replace=False)
+
+    training_points = []
+    training_data = []
+    for idx in idx_xy_plane:
+        tr_id = np.where((coord_3d[:, 0] == xy_plane[idx, 0]) & (coord_3d[:, 1] == xy_plane[idx, 1]))[0]
+        training_points.append(xy_plane[idx, :])
+        training_data.append(data_curve[tr_id])
 
     # results
-    results = {"validation": {"x-coord": [i for i in gx.ravel()],
-                              "y-coord": [i for i in gy.ravel()],
-                              "z-coord": [i for i in gz.ravel()],
+    results = {"validation": {"x-coord":  gx.ravel().tolist(),
+                              "y-coord": gy.ravel().tolist(),
+                              "z-coord": gz.ravel().tolist(),
                               "data": [i for i in data_curve]},
-               "training": {"x-coord": [i for i in coords[:, 0]],
-                            "y-coord": [i for i in coords[:, 1]],
-                            "z-coord": [i for i in coords[:, 2]],
-                            "data": [i for i in data_points]}}
+               "training": {"x-coord": np.array(training_points)[:, 0].tolist(),
+                            "y-coord": np.array(training_points)[:, 1].tolist(),
+                            "z-coord": depth.tolist(),
+                            "data": [t.tolist() for t in training_data]
+                            }}
 
     # dump file to pickle
     with open(os.path.join(output, "sin_data_3d.json"), "w") as fo:
         json.dump(results, fo, indent=2)
 
     # # create plot
-    plot_3D(coords, [gx, gy, gz], sin_3d_fct)
+    plot_3D(np.array(training_points), depth, [gx, gy, gz], sin_3d_fct)
 
     return
 
 
 if __name__ == "__main__":
-    main(x=100, y=100, z=100, output="../data/processed", nb_points=[100, 75, 50])
+    main(dimensions=[20, 20, 10], discretisation=[21, 21, 41], nb_samples=10, output="../data/processed")
