@@ -42,8 +42,11 @@ boundary_surfaces = {"G1" : {"layer_1": {"a": 0, "b": 1, "c": 0, "d": -2},
 "layer_2": {"a": 0, "b": 1, "c": 0, "d": -6}},
 "G2" : {"layer_1": {"a": 0.05, "b": 1, "c": -0.05, "d": -2},
 "layer_2": {"a": -0.05, "b": 1, "c": 0.05, "d": -6}},
+"G3" : {"layer_1": {"a": 0.05, "b": 1, "c": -0.05, "d": -2},
+"layer_2": {"a": -0.05, "b": 1, "c": 0.05, "d": -6}},
 "G4" : {"layer_1": {"a": 0, "b": 1, "c": 0, "d": -2},
 "layer_2": {"a": 0.25, "b": 1, "c": 0.25, "d": -6}}}
+
 for name, boundary_layers in boundary_surfaces.items():
     layer_1 = boundary_layers["layer_1"]
     layer_2 = boundary_layers["layer_2"]
@@ -85,9 +88,9 @@ for name, boundary_layers in boundary_surfaces.items():
     srf_fs_3 = get_srf(soils[3], "fs")
     
     points = []
-    for i in range(21):
-        for j in range(21):
-            for k in range(11):
+    for i in range(29):
+        for j in range(29):
+            for k in range(100):
                 point = {"x": i, "y": j, "z": k}
                 print(point)
                 is_above_layer_1 = (create_surface(layer_1, i, j, k) <= 0) and (
