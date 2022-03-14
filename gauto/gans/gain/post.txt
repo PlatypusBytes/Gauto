@@ -1,0 +1,4 @@
+In this project together with @Bruno we are testing GAN's to see how they perform in filling in missing data.
+As a first test a 3d block of IC values is created. A percentage of the 3d block is cropped and then the GAN
+is trained to fill in the blanks.
+The method is based on the paper and code of J. Yoon ().
