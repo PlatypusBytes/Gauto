@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 from gstools import SRF, Exponential, Gaussian, Matern, Linear
-import gstools as gs
 import matplotlib.pyplot as plt
+
 
 def create_surface(layer, x, y, z):
     return layer["a"] * x + layer["b"] * y + layer["c"] * z + layer["d"]
@@ -122,3 +122,4 @@ for name, boundary_layers in boundary_surfaces.items():
     plt.clf()
     ax = df.plot.hist(column=["qt"], by="layer", figsize=(10, 8))
     plt.savefig("data/dist_qt_" + name + '.png')
+    plt.close()
