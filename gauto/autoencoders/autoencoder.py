@@ -7,7 +7,7 @@ from gauto.model_settings import ActivationFunctions, LossFunctions, Optimizer
 
 class AutoEncoderDecoder:
     def __init__(self, shape, epochs=10, batch_size=20,
-                 filters=[32, 64, 128], pooling=[2, 2, 2], kernel_size=3, shuffle=True,
+                 filters=[32, 64, 128], pooling=[2, 2, 2], kernel_size=3, shuffle=True, perc_val=0.8,
                  activation_fct="relu", loss_fct="mean_squared_error", optimiser="Adam"):
 
         if len(filters) != len(pooling):
@@ -35,6 +35,7 @@ class AutoEncoderDecoder:
         self.activation_fct = activation_fct
         self.loss_fct = loss_fct
         self.optimiser = optimiser
+        self.percentage_val = perc_val  # percentage of validation. overwritten if data_validation exists
         # variables
         self.autoencoder = []
         self.prediction = []
@@ -79,7 +80,8 @@ class AutoEncoderDecoder:
                              epochs=self.epochs,
                              batch_size=self.batch_size,
                              shuffle=self.shuffle,
-                             # validation_data=validation_data,
+                             validation_split=self.percentage_val,
+                             validation_data=validation_data,
                              )
 
     def predict(self, data):

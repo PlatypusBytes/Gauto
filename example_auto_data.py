@@ -74,7 +74,7 @@ for i in range(data_val.shape[0]):
 t_ini = time()
 auto = AutoEncoderDecoder(data_tr.shape[1:], filters=[64, 128, 256], pooling=[2, 2, 2], epochs=150, batch_size=20)
 auto.compile_model()
-auto.train(data_tr, data_tr)
+auto.train(data_tr, data_tr, validation_data=(data_val, data_val))
 auto.predict(data_val)
 print(f"Elapsed time: {time() - t_ini} s")
 
