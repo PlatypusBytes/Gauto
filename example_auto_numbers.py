@@ -73,7 +73,9 @@ noisy_test_data = noise(test_data)
 
 # perform autoencoding / decoding
 t_ini = time()
-auto = AutoEncoderDecoder(train_data.shape[1:])
+auto = AutoEncoderDecoder(train_data.shape[1:],
+                          filters=[32, 32],
+                          pooling=[2, 2], epochs=10, batch_size=128, loss_fct="binary_crossentropy")
 auto.compile_model()
 auto.train(train_data, train_data)
 auto.predict(noisy_test_data)
