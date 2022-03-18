@@ -37,40 +37,51 @@ class AutoEncoderDecoder:
         self.optimiser = optimiser
         self.percentage_val = perc_val  # percentage of validation. overwritten if data_validation exists
         # variables
+        self.encoder = []
+        self.decoder = []
         self.autoencoder = []
         self.prediction = []
         # execute encoder decoder
         self.__encoder_decoder()
 
     def __encoder_decoder(self):
-        input = layers.Input(shape=self.shape)
-
         # build encoder
-        x = input
+        incoded_input = layers.Input(shape=self.shape)
+        encoder = incoded_input
         for i in range(self.nb_layers):
-            x = layers.Conv2D(filters=self.filters[i],
+            encoder = layers.Conv2D(filters=self.filters[i],
                               kernel_size=(self.kernel_size, self.kernel_size),
                               activation=self.activation_fct,
-                              padding="same")(x)
-            x = layers.MaxPooling2D((self.pooling[i], self.pooling[i]),
-                                    padding="same")(x)
+                              padding="same")(encoder)
+            encoder = layers.MaxPooling2D((self.pooling[i], self.pooling[i]),
+                                    padding="same")(encoder)
+
+        self.encoder = Model(incoded_input, encoder, name="Encoder")
 
         # build decoder
+        decoded_input = layers.Input(shape=encoder.shape[1:])
+        decoder = decoded_input
         for i in range(self.nb_layers-1, -1, -1):
-            x = layers.Conv2DTranspose(filters=self.filters[i],
+            decoder = layers.Conv2DTranspose(filters=self.filters[i],
                                        kernel_size=(self.kernel_size, self.kernel_size),
                                        activation=self.activation_fct,
-                                       padding="same")(x)
-            x = layers.UpSampling2D((2, 2))(x)
+                                       padding="same")(decoder)
+            decoder = layers.UpSampling2D((2, 2))(decoder)
 
-        x = layers.Conv2D(filters=self.shape[2],
+        decoder = layers.Conv2D(filters=self.shape[2],
                           kernel_size=(self.kernel_size, self.kernel_size),
                           activation=self.activation_fct,
-                          padding="same")(x)
+                          padding="same")(decoder)
 
-        self.autoencoder = Model(input, x)
+        self.decoder = Model(decoded_input, decoder, name="Decoder")
 
     def compile_model(self):
+
+        auto_input = layers.Input(shape=self.shape)
+        enc = self.encoder(auto_input)
+        dec = self.decoder(enc)
+
+        self.autoencoder = Model(auto_input, dec, name="AutoEncoderDecoder")
         self.autoencoder.compile(optimizer=self.optimiser, loss=self.loss_fct)
         print(self.autoencoder.summary())
 
@@ -83,6 +94,10 @@ class AutoEncoderDecoder:
                              validation_split=self.percentage_val,
                              validation_data=validation_data,
                              )
+        # encoder
+        self.encoder = Model(self.autoencoder.layers[1].input, self.autoencoder.layers[1].output)
+        # decoder
+        self.decoder = Model(self.autoencoder.layers[2].input, self.autoencoder.layers[2].output)
 
     def predict(self, data):
         self.prediction = self.autoencoder.predict(data)

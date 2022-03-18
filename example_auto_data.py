@@ -51,7 +51,7 @@ def make_plot(data0, data1, data2, name, output_f):
     cbar = plt.colorbar(mappable, cax=cax, fraction=0.1, pad=0.01)
     cbar.set_label(name, fontsize=10)
     plt.savefig(f"{output_f}.png")
-    # plt.show()
+    # plt.show().
     plt.close()
 
 
