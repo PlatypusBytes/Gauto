@@ -9,6 +9,7 @@ import datetime
 import numpy as np
 
 from matplotlib import pyplot as plt
+from matplotlib.widgets import Slider
 from IPython import display
 
 
@@ -19,15 +20,10 @@ BATCH_SIZE = 1
 # Each image is 256x256 in size
 IMG_WIDTH = 256
 IMG_HEIGHT = 256
-MAX_QT = 10.5
-MAX_FS = 111.5
+
 OUTPUT_CHANNELS = 1
 LAMBDA = 100
 
-def normalize(input, real):
-    input_image = (input_image / MAX_FS) - 1
-    real_image = (real_image / MAX_QT) - 1
-    return input_image, real_image
 
 def downsample(filters, size, apply_batchnorm=True):
     initializer = tf.random_normal_initializer(0., 0.02)    
@@ -175,8 +171,34 @@ def generate_images(model, test_input, tar, savefig=True, step=None):
     else:
       plt.show()
 
+def generate_images_slider(model, training_dataset):
+    dataset  = [value for counter, value in enumerate(training_dataset)]
+    prediction = model(dataset[0][0], training=True)
+    fig, ax = plt.subplots(1,3)
+    fig.subplots_adjust(bottom=0.35)
+    display_list = [dataset[0][0][0], dataset[0][1][0], prediction[0]]
+    title = ['Input Image', 'Ground Truth', 'Predicted Image']  
+    for i in range(3):
+      ax[i].set_title(title[i])
+      # Getting the pixel values in the [0, 1] range to plot.
+      ax[i].imshow(display_list[i] * 0.5 + 0.5)
+      ax[i].axis('off')    
+
+    axslice = plt.axes([0.25, 0.15, 0.65, 0.03])
+    freq = Slider(axslice, 'Slice number', 0, len(dataset), 0, valstep=1)
+
+    def update(val):
+      prediction = model(dataset[freq.val][0], training=True)
+      display_list = [dataset[freq.val][0][0], dataset[freq.val][1][0], prediction[0]]
+      title = ['Input Image', 'Ground Truth', 'Predicted Image']  
+      for i in range(3):
+        ax[i].set_title(title[i])
+        # Getting the pixel values in the [0, 1] range to plot.
+        ax[i].imshow(display_list[i] * 0.5 + 0.5)
+        ax[i].axis('off')
     
-    
+    freq.on_changed(update)
+    plt.show() 
 
 
 
@@ -201,6 +223,8 @@ def fit(train_ds, test_ds, steps):
         checkpoint.save(file_prefix=checkpoint_prefix)
 
 def load_data_and_normalize(name_dataset):
+    MAX_QT = 10.5
+    MAX_FS = 111.5
     full_data, train_input, binary_missing_data = data_loader(name_dataset, 0.9, "qt", sample_vertically=False)
     # define input shape based on the loaded dataset
     dataset = []
@@ -214,9 +238,21 @@ def load_data_and_normalize(name_dataset):
 
     return np.array(dataset).astype(np.float32) 
 
+def load_data_and_normalize_single_value(name_dataset):
+    train_output, train_input, binary_missing_data = data_loader(name_dataset, 0.99, "IC", sample_vertically=True)
+    # define input shape based on the loaded dataset
+    dataset = []
+    dataset.append(np.reshape(train_input, (100, 256, 256, 1)))
+    dataset.append(np.reshape(train_output, (100, 256, 256, 1)))
+
+    image_shape = dataset[0].shape[1:]
+    dataset[0] = (dataset[0] / np.amax(train_output)) - 1
+    dataset[1] = (dataset[1] / np.amax(train_output)) - 1
+
+    return np.array(dataset).astype(np.float32) 
 
 
-dataset = load_data_and_normalize("synthetic_data_G2")
+dataset = load_data_and_normalize_single_value("RF_1")
 input_dataset = tf.convert_to_tensor(tf.constant(dataset[0]))
 train_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset)
 train_input_dataset = train_input_dataset.batch(BATCH_SIZE)
@@ -225,7 +261,7 @@ train_target_dataset = tf.data.Dataset.from_tensor_slices(target_dataset)
 train_target_dataset = train_target_dataset.batch(BATCH_SIZE)
 train_dataset = tf.data.Dataset.zip((train_input_dataset, train_target_dataset))
 
-test_dataset = load_data_and_normalize("synthetic_data_G2")
+test_dataset = load_data_and_normalize_single_value("RF_1")
 input_dataset_test = tf.convert_to_tensor(tf.constant(test_dataset[0]))
 test_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset_test)
 test_input_dataset = test_input_dataset.batch(BATCH_SIZE)
@@ -271,5 +307,6 @@ checkpoint = tf.train.Checkpoint(generator_optimizer=generator_optimizer,
                                  discriminator=discriminator)
 
 
-fit(train_dataset, test_dataset, steps=40000)
+fit(train_dataset, test_dataset, steps=10000)
+generate_images_slider(generator, train_dataset)
 print(1)

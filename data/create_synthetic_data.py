@@ -88,8 +88,8 @@ for name, boundary_layers in boundary_surfaces.items():
     srf_fs_3 = get_srf(soils[3], "fs")
     
     points = []
-    for i in range(29):
-        for j in range(29):
+    for i in range(256):
+        for j in range(256):
             for k in range(100):
                 point = {"x": i, "y": j, "z": k}
                 print(point)
