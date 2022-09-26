@@ -239,7 +239,7 @@ def load_data_and_normalize(name_dataset):
     return np.array(dataset).astype(np.float32) 
 
 def load_data_and_normalize_single_value(name_dataset):
-    train_output, train_input, binary_missing_data = data_loader(name_dataset, 0.99, "IC", sample_vertically=True)
+    train_output, train_input, binary_missing_data = data_loader(name_dataset, 0.9, "IC", sample_vertically=True)
     # define input shape based on the loaded dataset
     dataset = []
     dataset.append(np.reshape(train_input, (100, 256, 256, 1)))
@@ -253,6 +253,17 @@ def load_data_and_normalize_single_value(name_dataset):
 
 
 dataset = load_data_and_normalize_single_value("RF_1")
+
+from mpl_toolkits.mplot3d import Axes3D
+fig = plt.figure()
+ax = fig.gca(projection='3d')
+x_coord = np.linspace(0, 100, 100, dtype=int)
+y_coord = np.linspace(0, 256, 256, dtype=int)
+z_coord = np.linspace(0, 256, 256, dtype=int)
+X, Z = np.meshgrid(y_coord, z_coord )
+[ax.scatter(X.flatten(), np.ones(shape=X.shape).flatten() + counter, Z.flatten(), c=slice.flatten(), linewidth=0) for counter, slice in enumerate(dataset[0])]
+plt.savefig('3d_missing_data.png')
+
 input_dataset = tf.convert_to_tensor(tf.constant(dataset[0]))
 train_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset)
 train_input_dataset = train_input_dataset.batch(BATCH_SIZE)

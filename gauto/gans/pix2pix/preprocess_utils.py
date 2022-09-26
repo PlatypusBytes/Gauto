@@ -14,15 +14,17 @@ def binary_sampler_by_columns(values,dimesions, miss_rate):
   Returns:
     - binary_random_matrix: generated binary random matrix.
   """
-  dim_choice = np.sqrt(dimesions)
-  data_m = []
-  for slice in values:  
-    random_indexes = random.sample(range(0,int(dim_choice)), int(miss_rate*dim_choice))
-    transposed_slice = np.reshape(list(slice), (256,256))
-    ones_slice = np.ones(transposed_slice.shape)
-    ones_slice[random_indexes]=0
-    data_m.append(ones_slice.flatten())
-  return np.array(data_m)
+  dim_choice = int(np.sqrt(dimesions))
+  missing_columns_number = int(miss_rate*dim_choice* len(values))
+  missing_points_xy = [divmod(i, len(values)) for i in random.sample(range(dim_choice * len(values)), missing_columns_number)]
+  data_m = np.ones(values.shape)
+  for missing_point in missing_points_xy:
+    transposed_slice = np.reshape(list(data_m[missing_point[1]]), (256,256))
+    transposed_slice[missing_point[0]] = 0
+    data_m[missing_point[1]] = transposed_slice.flatten()
+  data_m = np.array(data_m)
+  return data_m
+
 
 def binary_sampler_by_rows(values,dimesions, miss_rate):
   """Sample binary random variables by rows.
@@ -63,7 +65,7 @@ def data_loader(data_name, miss_rate, value_name, sample_vertically=True):
     data_x = []
     file_name = "data/" + data_name + ".csv"
     df = pd.read_csv(file_name)
-    grouped = df.groupby('z')
+    grouped = df.groupby('x')
     for name, group in grouped:
       data_x.append( list(group[value_name]))
     data_x = np.array(data_x, dtype=float)
