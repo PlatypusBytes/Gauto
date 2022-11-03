@@ -47,18 +47,17 @@ def data_loader(data_name, miss_rate):
         data_x = []
         file_name = "data/" + data_name + ".csv"
         df = pd.read_csv(file_name)
-        grouped = df.groupby('z')
+        grouped = df.groupby("z")
         for name, group in grouped:
-          data_x.append( list(group['fs']))
+            data_x.append(list(group["fs"]))
         data_x = np.array(data_x, dtype=float)
-
 
     # Parameters
     no, dim = data_x.shape
-    data_m=binary_sampler_by_columns(data_x, dim, miss_rate)
+    data_m = binary_sampler_by_columns(data_x, dim, miss_rate)
     # Introduce missing data
-    #data_m = binary_sampler(1 - miss_rate, no, dim)
+    # data_m = binary_sampler(1 - miss_rate, no, dim)
     miss_data_x = data_x.copy()
-    miss_data_x[data_m == 0.] = np.nan
+    miss_data_x[data_m == 0.0] = np.nan
 
     return data_x, miss_data_x, data_m

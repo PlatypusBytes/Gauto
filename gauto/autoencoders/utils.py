@@ -19,7 +19,7 @@ def make_plot(data, title, name, x_label=None, y_label=None, output_f="./"):
     nb_data = len(data)
 
     # and plot everything
-    fig, ax = plt.subplots(nb_data, 1, figsize=(5*nb_data, 5))
+    fig, ax = plt.subplots(nb_data, 1, figsize=(5 * nb_data, 5))
     for i in range(nb_data):
         ax[i].set_position([0.05 * (i + 1) + 0.4 * i, 0.15, 0.45, 0.7])
         ax[i].set_title(title[i])

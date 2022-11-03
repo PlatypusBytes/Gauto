@@ -28,6 +28,7 @@ from gain import gain
 from utils import rmse_loss, plot_data_distributions
 from make_gif import make_gif
 
+
 def main(args):
     """Main function for UCI letter and spam datasets.
 
@@ -60,10 +61,10 @@ def main(args):
     # Impute missing data
     imputed_data_x = gain(miss_data_x, gain_parameters, ori_data_x)
 
-    make_gif("output\*.png", 'output\png_to_gif.gif')
+    make_gif("output\*.png", "output\png_to_gif.gif")
 
     plot_data_distributions(ori_data_x, imputed_data_x, "output\distributions_fs.png")
-    
+
     # Report the RMSE performance
     rmse = rmse_loss(ori_data_x, imputed_data_x, data_m)
 
