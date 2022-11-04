@@ -179,7 +179,7 @@ def Generator():
     return tf.keras.Model(inputs=inputs, outputs=x)
 
 
-def generator_loss(disc_generated_output, gen_output, target, loss_object):
+def generator_loss(disc_generated_output, gen_output, target):
     gan_loss = loss_object(tf.ones_like(disc_generated_output), disc_generated_output)
     # Mean absolute error
     l1_loss = tf.reduce_mean(tf.abs(target - gen_output))
@@ -236,7 +236,7 @@ def Discriminator():
     return tf.keras.Model(inputs=[inp, tar], outputs=last)
 
 
-def discriminator_loss(disc_real_output, disc_generated_output, loss_object):
+def discriminator_loss(disc_real_output, disc_generated_output):
     real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
     generated_loss = loss_object(
         tf.zeros_like(disc_generated_output), disc_generated_output
@@ -246,15 +246,15 @@ def discriminator_loss(disc_real_output, disc_generated_output, loss_object):
 
 
 @tf.function
-def train_step(input_image, target, step, generator, discriminator, loss_object):
+def train_step(input_image, target, step):
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         gen_output = generator(input_image, training=True)
         disc_real_output = discriminator([input_image, target], training=True)
         disc_generated_output = discriminator([input_image, gen_output], training=True)
         gen_total_loss, gen_gan_loss, gen_l1_loss = generator_loss(
-            disc_generated_output, gen_output, target, loss_object
+            disc_generated_output, gen_output, target
         )
-        disc_loss = discriminator_loss(disc_real_output, disc_generated_output, loss_object)
+        disc_loss = discriminator_loss(disc_real_output, disc_generated_output)
     generator_gradients = gen_tape.gradient(
         gen_total_loss, generator.trainable_variables
     )
@@ -365,7 +365,7 @@ def fit(train_ds, test_ds, steps, generator, discriminator,  is_3D=False, coords
                 generate_images(generator, example_input, example_target, step=step)
             print(f"Step: {step // 1000}k")
         loss_object = tf.keras.losses.MeanSquaredError()
-        train_step(input_image, target, step, generator, discriminator, loss_object)
+        train_step(input_image, target, step)
         # Training step
         if (step + 1) % 10 == 0:
             print(".", end="", flush=True)
@@ -529,28 +529,6 @@ def train_and_set_up_3d_model():
         log_dir + "fit_train3d/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     )
 
-    loss_object = tf.keras.losses.MeanSquaredError()
-    generator = Generator3d()
-    # plot the generator
-    tf.keras.utils.plot_model(generator, show_shapes=True, dpi=64)
-    # test that the generator works
-    inp = tf.convert_to_tensor(tf.constant(dataset[0, 0, ...]))
-    gen_output = generator(inp[tf.newaxis, ...], training=False)
-    plt.imshow(gen_output[0, 0, ...])
-    # create discriminator
-    discriminator = Discriminator3D(
-        vol_rows=64, vol_cols=64, vol_height=64, channels=1, output_channels=1
-    )
-    # plot the dicriminator
-    tf.keras.utils.plot_model(discriminator, show_shapes=True, dpi=64)
-    # test the discriminator
-    disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
-    plt.imshow(disc_out[0, 0, ..., -1], vmin=-2, vmax=2, cmap="RdBu_r")
-    plt.colorbar()
-
-    # define optimizers
-    generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     # test image generation
     # for example_input, example_target in test_dataset.take(1):
     #  generate_images(generator, example_input, example_target)
@@ -584,6 +562,11 @@ if __name__ == "__main__":
 
     summary_writer = tf.summary.create_file_writer(
         log_dir + "fit_train/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    )
+    loss_object = tf.keras.losses.MeanSquaredError()
+    generator = Generator3d()
+    discriminator = Discriminator3D(
+        vol_rows=64, vol_cols=64, vol_height=64, channels=1, output_channels=1
     )
 
 
