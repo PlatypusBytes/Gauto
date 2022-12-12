@@ -7,6 +7,7 @@ import time
 import datetime
 import numpy as np
 import pandas as pd
+import random
 import plotly.express as px
 
 from matplotlib import pyplot as plt
@@ -373,6 +374,15 @@ def fit(train_ds, test_ds, steps, generator, discriminator,  is_3D=False, coords
         if (step + 1) % 5000 == 0:
             checkpoint.save(file_prefix=checkpoint_prefix)
 
+def get_csv_files_names(directory):
+    directory = os.path.join(directory)
+    rfs = []
+    for root,dirs,files in os.walk(directory):
+        for file in files:
+           if file.endswith(".csv"):
+                df = pd.read_csv(os.path.join(directory,file), delimiter=',')
+                rfs.append(df)
+    return rfs
 
 def load_data_and_normalize(name_dataset):
     MAX_QT = 10.5
@@ -412,100 +422,49 @@ def load_data_and_normalize_single_value(name_dataset):
 
 
 def load_data_and_normalize_3d_figure(
-    name_dataset, resize_shape=(256, 256, 256, 1), miss_rate=0.9
+    name_dataset, artifial_cpts, resize_shape=(256, 256, 256, 1)
 ):
-    train_output, train_input, binary_missing_data, coords = data_loader_with_coords(
-        name_dataset, miss_rate, "IC", sample_vertically=True
-    )
+    data_x = []
+    x, y, z = [], [], []
+    grouped = name_dataset.groupby("x")
+    for name, group in grouped:
+        data_x.append(list(group['IC']))
+        x.append(list(group["x"]))
+        y.append(list(group["y"]))
+        z.append(list(group["z"]))
+    data_x = np.array(data_x, dtype=float)
+    x = np.array(x, dtype=float)
+    y = np.array(y, dtype=float)
+    z = np.array(z, dtype=float)
+
+    data_x = np.reshape(data_x, resize_shape[:-1])
+    idxs = np.random.choice(resize_shape[0] * resize_shape[1], size=artifial_cpts, replace=0)
+    random_miss = np.column_stack(np.unravel_index(idxs,(resize_shape[0] , resize_shape[1])))
+
+    data_miss_array = np.zeros_like(data_x)
+    for data_miss in random_miss:
+        data_miss_array[data_miss[0], data_miss[1]] = data_x[data_miss[0], data_miss[1]]
+
+     
     # define input shape based on the loaded dataset
     dataset = []
-    dataset.append(np.reshape(train_input, resize_shape))
-    dataset.append(np.reshape(train_output, resize_shape))
+    dataset.append(np.reshape(data_miss_array, resize_shape))
+    dataset.append(np.reshape(data_x, resize_shape))
+    
 
     image_shape = dataset[0].shape[1:]
-    dataset[0] = dataset[0] / np.amax(train_output)
-    dataset[1] = dataset[1] / np.amax(train_output)
+    dataset[0] = dataset[0] / AMAX
+    dataset[1] = dataset[1] / AMAX
 
-    return np.array(dataset).astype(np.float32), np.array(coords).astype(np.float32)
-
-
-def set_up_and_train_2d_model():
-
-    # from mpl_toolkits.mplot3d import Axes3D
-    # fig = plt.figure()
-    # ax = fig.gca(projection='3d')
-    # x_coord = np.linspace(0, 100, 100, dtype=int)
-    # y_coord = np.linspace(0, 256, 256, dtype=int)
-    # z_coord = np.linspace(0, 256, 256, dtype=int)
-    # X, Z = np.meshgrid(y_coord, z_coord )
-    # [ax.scatter(X.flatten(), np.ones(shape=X.shape).flatten() + counter, Z.flatten(), c=slice.flatten(), linewidth=0) for counter, #slice in     enumerate(dataset[0])]
-    # plt.savefig('3d_missing_data.png')
-    # plt.clf()
-
-    input_dataset = tf.convert_to_tensor(tf.constant(dataset[0]))
-    train_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset)
-    train_input_dataset = train_input_dataset.batch(BATCH_SIZE)
-    target_dataset = tf.convert_to_tensor(tf.constant(dataset[1]))
-    train_target_dataset = tf.data.Dataset.from_tensor_slices(target_dataset)
-    train_target_dataset = train_target_dataset.batch(BATCH_SIZE)
-    train_dataset = tf.data.Dataset.zip((train_input_dataset, train_target_dataset))
-
-    test_dataset = load_data_and_normalize_single_value("RF_1")
-    input_dataset_test = tf.convert_to_tensor(tf.constant(test_dataset[0]))
-    test_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset_test)
-    test_input_dataset = test_input_dataset.batch(BATCH_SIZE)
-    target_dataset_test = tf.convert_to_tensor(tf.constant(test_dataset[1]))
-    test_target_dataset = tf.data.Dataset.from_tensor_slices(target_dataset_test)
-    test_target_dataset = test_target_dataset.batch(BATCH_SIZE)
-    test_dataset = tf.data.Dataset.zip((test_input_dataset, test_target_dataset))
-
-
-    loss_object = tf.keras.losses.MeanSquaredError()
-    generator = Generator()
-    # plot the generator
-    tf.keras.utils.plot_model(generator, show_shapes=True, dpi=64)
-    # test that the generator works
-    inp = tf.convert_to_tensor(tf.constant(dataset[0][0]))
-    gen_output = generator(inp[tf.newaxis, ...], training=False)
-    plt.imshow(gen_output[0, ...])
-    # create discriminator
-    discriminator = Discriminator()
-    # plot the dicriminator
-    tf.keras.utils.plot_model(discriminator, show_shapes=True, dpi=64)
-    # test the discriminator
-    disc_out = discriminator([inp[tf.newaxis, ...], gen_output], training=False)
-    plt.imshow(disc_out[0, ..., -1], vmin=-20, vmax=20, cmap="RdBu_r")
-    plt.colorbar()
-
-
-    # test image generation
-    # for example_input, example_target in test_dataset.take(1):
-    #  generate_images(generator, example_input, example_target)
-    checkpoint_dir = "./training_checkpoints"
-    checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt")
-    checkpoint = tf.train.Checkpoint(
-        generator_optimizer=generator_optimizer,
-        discriminator_optimizer=discriminator_optimizer,
-        generator=generator,
-        discriminator=discriminator,
-    )
-
-    fit(train_dataset, test_dataset, steps=10000)
-    generate_images_slider(generator, train_dataset)
-    print(1)
+    return np.array(dataset).astype(np.float32)
 
 
 def train_and_set_up_3d_model():
     # physical_devices = tf.config.experimental.list_physical_devices('GPU')
     # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    files = [f"D:\gauto\data\RF_3d_{i}.csv" for i in range(10)]
-    data = [
-            load_data_and_normalize_3d_figure(file_name, (64, 64, 64, 1))
-            for file_name in files
-        ]
+    files = get_csv_files_names("D:\\gauto\\data\\cond_rf\\train")
+    dataset = np.array([load_data_and_normalize_3d_figure(file_pd, 20, (64, 64, 64, 1)) for file_pd in files])
 
-    dataset = np.array([sub_data[0] for sub_data in data])
-    coords = np.array([sub_data[1] for sub_data in data])
     input_dataset = tf.convert_to_tensor(tf.constant(dataset[:, 0, ...]))
     train_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset)
     train_input_dataset = train_input_dataset.batch(BATCH_SIZE)
@@ -514,7 +473,10 @@ def train_and_set_up_3d_model():
     train_target_dataset = train_target_dataset.batch(BATCH_SIZE)
     train_dataset = tf.data.Dataset.zip((train_input_dataset, train_target_dataset))
 
-    test_dataset = dataset
+
+    files_test = get_csv_files_names("D:\\gauto\\data\\cond_rf\\test")
+    test_dataset = np.array([load_data_and_normalize_3d_figure(file_pd, 20, (64, 64, 64, 1)) for file_pd in files_test])
+
     input_dataset_test = tf.convert_to_tensor(tf.constant(test_dataset[:, 0, ...]))
     test_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset_test)
     test_input_dataset = test_input_dataset.batch(BATCH_SIZE)
@@ -541,20 +503,28 @@ def train_and_set_up_3d_model():
         discriminator=discriminator,
     )
 
-    fit(train_dataset, test_dataset, steps=10000, generator=generator, discriminator=discriminator,  is_3D=True, coords=coords)
+    # create coordinates 
+    x_grid = np.linspace(0, 64, 64)
+    y_grid = np.linspace(0, 64, 64)
+    z_grid = np.linspace(0, 64, 64)
+    xs, ys, zs = np.meshgrid(x_grid, y_grid, z_grid, indexing="ij")
+
+    fit(train_dataset, test_dataset, steps=1000, generator=generator, discriminator=discriminator,  is_3D=True, coords=np.array([xs, ys, zs]))
     print(1)
 
 
 if __name__ == "__main__":
     # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
     BATCH_SIZE = 1
-    import os
+    AMAX = 4.5
+    OUTPUT_CHANNELS = 1
+    LAMBDA = 100
 
+    import os
     os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     import tensorflow as tf
 
-    OUTPUT_CHANNELS = 1
-    LAMBDA = 100
+
     # define optimizers
     generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
     discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)

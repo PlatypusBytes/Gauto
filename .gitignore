@@ -6,6 +6,11 @@
 # Node artifact files
 node_modules/
 dist/
+# AI big model filess
+training_checkpoints_2d/
+training_checkpoints/
+data/
+
 
 # Compiled Java class files
 *.class

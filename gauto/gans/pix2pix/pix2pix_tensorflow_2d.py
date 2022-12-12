@@ -15,6 +15,8 @@ from matplotlib import pyplot as plt
 from matplotlib.widgets import Slider
 from IPython import display
 
+OUTPUT_CHANNELS = 1
+AMAX = 4.5
 
 def downsample(filters, size, apply_batchnorm=True):
     initializer = tf.random_normal_initializer(0.0, 0.02)
@@ -58,6 +60,8 @@ def upsample(filters, size, apply_dropout=False):
 def Generator():
     inputs = tf.keras.layers.Input(shape=[64, 64, 1])
     down_stack = [
+        downsample(64, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64)`
+        downsample(64, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64)
         downsample(64, 4, apply_batchnorm=False),  # (batch_size, 128, 128, 64)
         downsample(128, 4),  # (batch_size, 64, 64, 128)
         downsample(256, 4),  # (batch_size, 32, 32, 256)
@@ -128,10 +132,10 @@ def Discriminator():
 
 
 def discriminator_loss(disc_real_output, disc_generated_output):
-    real_loss = loss_object(tf.ones_like(disc_real_output), disc_real_output)
-    generated_loss = loss_object(
+    real_loss = tf.reduce_mean(loss_object(tf.ones_like(disc_real_output), disc_real_output))
+    generated_loss = tf.reduce_mean(loss_object(
         tf.zeros_like(disc_generated_output), disc_generated_output
-    )
+    ))
     total_disc_loss = real_loss + generated_loss
     return total_disc_loss
 
@@ -159,10 +163,10 @@ def train_step(input_image, target, step):
         zip(discriminator_gradients, discriminator.trainable_variables)
     )
     with summary_writer.as_default():
-        tf.summary.scalar("gen_total_loss", gen_total_loss, step=step // 1000)
-        tf.summary.scalar("gen_gan_loss", gen_gan_loss, step=step // 1000)
-        tf.summary.scalar("gen_l1_loss", gen_l1_loss, step=step // 1000)
-        tf.summary.scalar("disc_loss", disc_loss, step=step // 1000)
+        tf.summary.scalar("gen_total_loss", gen_total_loss, step=step)
+        tf.summary.scalar("gen_gan_loss", gen_gan_loss, step=step)
+        tf.summary.scalar("gen_l1_loss", gen_l1_loss, step=step)
+        tf.summary.scalar("disc_loss", disc_loss, step=step)
 
 
 def generate_images_slider_pl(model, test_inputs, tars, savefig=True, step=None): 
@@ -208,37 +212,67 @@ def generate_images(model, test_input, tar, savefig=True, step=None):
         plt.show()
 
 
+def all_images(model, input_dataset):
+    from matplotlib import rc
+    rc('font',**{'family':'serif','serif':['Times'], 'size': 14})
+    rc('text', usetex=True)
+    dataset = [value for counter, value in enumerate(input_dataset)]
+    predictions = [model(data[0], training=True) for data in dataset]
+    data_diff = [data[1].numpy()[0,:,:] - predictions[counter].numpy()[0,:,:,0] for counter, data in enumerate(dataset)]
+    for counter, image_output in enumerate(predictions):
+        fig, ax = plt.subplots(1, 4)
+        fig.set_size_inches(18.5, 10.5)
+        error = np.mean(np.array(np.abs(data_diff[counter])))
+        fig.suptitle(f"Absolute error: {error}", fontsize=15)
+        display_list = [dataset[counter][0][0].numpy().T * AMAX, 
+                        dataset[counter][1][0].numpy().T * AMAX, 
+                        predictions[counter].numpy().T[0,:,:] * AMAX,
+                        data_diff[counter].T * AMAX]
+        title = ["Input Image", "Ground Truth", "Predicted Image", "Absolute difference"]
+        for i in range(4):
+            ax[i].set_title(title[i])
+            # Getting the pixel values in the [0, 1] range to plot.
+            im = ax[i].imshow(display_list[i], vmin=0, vmax=AMAX)
+            ax[i].axis("off")
+        fig.colorbar(im, ax=ax.ravel().tolist(), orientation="horizontal")
+        fig.savefig(f"slice_{counter}_prediction.png")
+        plt.close(fig)
+
 def generate_images_slider(model, training_dataset):
     dataset = [value for counter, value in enumerate(training_dataset)]
     prediction = model(dataset[0][0], training=True)
     fig, ax = plt.subplots(1, 3)
     fig.subplots_adjust(bottom=0.35)
-    display_list = [dataset[0][0][0].T, dataset[0][1][0].T, prediction[0].T]
+    display_list = [dataset[0][0][0].numpy().T, dataset[0][1][0].numpy().T, prediction[0].numpy().T[0,:,:]]
     title = ["Input Image", "Ground Truth", "Predicted Image"]
     for i in range(3):
         ax[i].set_title(title[i])
         # Getting the pixel values in the [0, 1] range to plot.
-        ax[i].imshow(display_list[i] * 0.5 + 0.5)
+        im = ax[i].imshow(display_list[i], vmin=0, vmax=1)
         ax[i].axis("off")
 
     axslice = plt.axes([0.25, 0.15, 0.65, 0.03])
     freq = Slider(axslice, "Slice number", 0, len(dataset), 0, valstep=1)
 
+
+
     def update(val):
         prediction = model(dataset[freq.val][0], training=True)
-        display_list = [dataset[freq.val][0][0].T, dataset[freq.val][1][0].T, prediction[0].T]
+        display_list = [dataset[freq.val][0][0].numpy().T, dataset[freq.val][1][0].numpy().T, prediction[0].numpy().T[0,:,:]]
         title = ["Input Image", "Ground Truth", "Predicted Image"]
         for i in range(3):
             ax[i].set_title(title[i])
             # Getting the pixel values in the [0, 1] range to plot.
-            ax[i].imshow(display_list[i] * 0.5 + 0.5)
+            im = ax[i].imshow(display_list[i], vmin=0, vmax=1)
             ax[i].axis("off")
+
+    cb = plt.colorbar(im ,ax = [ax[0]], location = 'left')
 
     freq.on_changed(update)
     plt.show()
 
 
-def fit(train_ds, test_ds, steps):
+def fit(train_ds, test_ds, validation_ds, steps):
     example_input, example_target = next(iter(test_ds.take(1)))
     start = time.time()
     for step, value_to_unpack in train_ds.repeat().take(steps).enumerate():
@@ -249,6 +283,8 @@ def fit(train_ds, test_ds, steps):
                 print(f"Time taken for 1000 steps: {time.time() - start:.2f} sec\n")
             start = time.time()
             generate_images(generator, example_input, example_target, step=step)
+            if validation_ds is not None:
+                one_one_plot_validation(validation_ds, generator)
             print(f"Step: {step // 1000}k")
         train_step(input_image, target, step)
         # Training step
@@ -315,7 +351,7 @@ def remove_random_columns(data_x, miss_rate):
     return miss_list
 
 
-def apply_miss_rate_per_rf(rfs, miss_rate=0.9):
+def apply_miss_rate_per_rf(rfs, miss_rate=0.8):
     missing_data, full_data = [], []
     value_name = 'IC'
     for counter, rf in enumerate(rfs):
@@ -330,18 +366,80 @@ def apply_miss_rate_per_rf(rfs, miss_rate=0.9):
         full_data.append(data_x)
     return missing_data, full_data
 
+def remove_one_cpt(rfs):
+    missing_data, full_data = [], []
+    value_name = 'IC'
+    for counter, rf in enumerate(rfs):
+        data_x = []
+        grouped = rf.groupby("x")
+        for name, group in grouped:
+            data_x.append(list(group[value_name]))
+        data_x = np.array(data_x, dtype=float)
+        # find filled in columns
+        non_zeros_column = np.nonzero(np.any(data_x != 0, axis=1))[0][1:-1]
+        selected_column = random.choice(non_zeros_column)
+        data_m = data_x.copy()
+        data_m[selected_column] = np.zeros_like(data_m[selected_column])
+        missing_data.append(data_m)
+        full_data.append(data_x)        
+    return missing_data, full_data
 
+def one_one_plot_validation(validation_dataset, model):
+    # validation
+    dataset = [value for counter, value in enumerate(validation_dataset)]
+    data_diff = [data[-1].numpy() - data[0].numpy() for data in dataset]
+    indexes = [np.nonzero(np.any(data[0] != 0, axis=1))[0][0] for data in data_diff]
+    predictions = [model(data[0], training=False) for data in dataset]
+    plt.clf()
+    for counter, ind in enumerate(indexes):
+        plt.plot(dataset[counter][-1].numpy()[0, ind, :], predictions[counter][-1].numpy()[ind, :, 0], "o", label=f"Validation set {counter}")
+    plt.plot([0,1], [0,1], label="1-1 line")
+    plt.xlabel("Expected normalized value")
+    plt.ylabel("Predicted normalized value")
+    plt.legend()
+    plt.savefig("Validation_output.png")
+
+
+def load_validation_data(directory):
+    rfs = read_all_csv_files(directory)
+    validation_input, validation_output = remove_one_cpt(rfs)
+    validation_input = np.array([np.reshape(i, (64, 64)).astype(np.float32) for i in validation_input])
+    validation_output = np.array([np.reshape(i, (64, 64)).astype(np.float32) for i in validation_output])
+    maximum_value = AMAX
+    validation_output = np.array(validation_output) / maximum_value
+    validation_input = np.array(validation_input) / maximum_value
+    return np.array([validation_input, validation_output]).astype(np.float32)
 
 def load_and_normalize_RFs_in_folder(directory):
     rfs = read_all_csv_files(directory)
-    train_input, train_output = apply_miss_rate_per_rf(rfs)   
-
-    train_output = train_output / np.amax(train_output)
-    train_input = train_input / np.amax(train_output)
+    train_input, train_output = apply_miss_rate_per_rf(rfs)
+    train_input = np.array([np.reshape(i, (64, 64)).astype(np.float32) for i in train_input])
+    train_output = np.array([np.reshape(i, (64, 64)).astype(np.float32) for i in train_output])
+    maximum_value = AMAX
+    train_output = np.array(train_output) / maximum_value
+    train_input = np.array(train_input) / maximum_value
     return np.array([train_input, train_output]).astype(np.float32)
 
 def set_up_and_train_2d_model():
-    dataset = load_and_normalize_RFs_in_folder("data\cond_rf")
+    all_data = read_all_csv_files("data\\layers_n\\test\\2d")
+    merged_data =  pd.concat(all_data)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    from matplotlib import rc
+    #rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    rc('font',**{'family':'serif','serif':['Times']})
+    rc('text', usetex=True)
+
+    sc = ax.scatter(merged_data["x"], merged_data["y"], merged_data["z"], c=merged_data["IC"])
+    plt.colorbar(sc)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+
+    plt.savefig("3dblong.png")
+
+    dataset = load_and_normalize_RFs_in_folder("data\\layers_n\\train\\2d")
     input_dataset = tf.convert_to_tensor(tf.constant(dataset[0]))
     train_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset)
     train_input_dataset = train_input_dataset.batch(BATCH_SIZE)
@@ -350,7 +448,7 @@ def set_up_and_train_2d_model():
     train_target_dataset = train_target_dataset.batch(BATCH_SIZE)
     train_dataset = tf.data.Dataset.zip((train_input_dataset, train_target_dataset))
 
-    test_dataset = dataset
+    test_dataset = load_and_normalize_RFs_in_folder("data\\layers_n\\test\\2d")
     input_dataset_test = tf.convert_to_tensor(tf.constant(test_dataset[0]))
     test_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset_test)
     test_input_dataset = test_input_dataset.batch(BATCH_SIZE)
@@ -359,29 +457,58 @@ def set_up_and_train_2d_model():
     test_target_dataset = test_target_dataset.batch(BATCH_SIZE)
     test_dataset = tf.data.Dataset.zip((test_input_dataset, test_target_dataset))
 
+    #validation_dataset = load_validation_data("data\cond_rf\\validation_final")
+    #input_dataset_validation = tf.convert_to_tensor(tf.constant(validation_dataset[0]))
+    #validation_input_dataset = tf.data.Dataset.from_tensor_slices(input_dataset_validation)
+    #validation_input_dataset = validation_input_dataset.batch(BATCH_SIZE)
+    #target_dataset_validation = tf.convert_to_tensor(tf.constant(validation_dataset[1]))
+    #validation_target_dataset = tf.data.Dataset.from_tensor_slices(target_dataset_validation)
+    #validation_target_dataset = validation_target_dataset.batch(BATCH_SIZE)
+    #validation_dataset = tf.data.Dataset.zip((validation_input_dataset, validation_target_dataset))
 
+    fit(train_dataset, test_dataset,None,  steps=12000)
 
-    fit(train_dataset, test_dataset, steps=10000)
-    generate_images_slider(generator, train_dataset)
+    print(1)
+    # TODO plot against all the training inputs
+    all_images(generator, test_dataset) 
+    # TODO plot diff 
+    dataset = [value for counter, value in enumerate(test_dataset)]
+    predictions = [generator(data[0], training=True) for data in dataset]
+    data_diff = [data[1].numpy()[0,:,:] - predictions[counter].numpy()[0,:,:,0] for counter, data in enumerate(dataset)]
+
+    mean_axis_error = np.mean(np.array(np.abs(data_diff)), axis=0)
+    plt.clf()
+    plt.imshow(mean_axis_error)
+    plt.colorbar
+    fig, ax = plt.subplots(figsize=(4,4))
+    im = ax.imshow(mean_axis_error.T)
+    ax.set_xlabel("Mean error per pixel at the end of training")
+    fig.colorbar(im, orientation="horizontal")
+    plt.show()
+
+    # TODO calculate all the diffs
+    mean_error = np.mean(np.abs(np.array(data_diff)).flatten())
+    std_error = np.std(np.array(data_diff).flatten())
+    print(f"stats mean abserror {mean_error} std : {std_error}")
 
 
 if __name__ == "__main__":
     # The batch size of 1 produced better results for the U-Net in the original pix2pix experiment
     BATCH_SIZE = 1
     import os
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    AMAX = 4.5
+    #os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     import tensorflow as tf
 
     OUTPUT_CHANNELS = 1
     LAMBDA = 100
     # define optimizers
-    generator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
-    discriminator_optimizer = tf.keras.optimizers.Adam(2e-4, beta_1=0.5)
+    generator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
+    discriminator_optimizer = tf.keras.optimizers.Adam(1e-4, beta_1=0.5)
     log_dir = "logs/"
 
     summary_writer = tf.summary.create_file_writer(
-        log_dir + "fit_train/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir + "fit_train/keep" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     )
     loss_object = tf.keras.losses.MeanSquaredError()
     generator = Generator()
